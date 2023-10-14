@@ -1,0 +1,39 @@
+{
+  "name": "verzod",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": "false",
+  "description": "A simple versioning and migration library based on Zod schemas",
+  "author": "Andrew Bastin (andrewbastin.k@gmail.com)",
+  "homepage": "https://github.com/AndrewBastin/verzod",
+  "bugs": {
+    "url": "https://github.com/AndrewBastin/verzod/issues"
+  },
+  "keywords": [
+    "versioning",
+    "migration",
+    "zod"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": "./dist/index.js",
+  "scripts": {
+    "test": "vitest --run",
+    "build": "tsup",
+    "prepublish": "tsup"
+  },
+  "dependencies": {
+    "zod": "^3.22.2"
+  },
+  "devDependencies": {
+    "jiti": "^1.20.0",
+    "tsup": "^7.2.0",
+    "typescript": "^5.2.2",
+    "vitest": "^0.34.6"
+  }
+}
