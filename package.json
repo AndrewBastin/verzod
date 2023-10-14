@@ -2,7 +2,6 @@
   "name": "verzod",
   "version": "0.1.0",
   "license": "MIT",
-  "private": "false",
   "description": "A simple versioning and migration library based on Zod schemas",
   "author": "Andrew Bastin (andrewbastin.k@gmail.com)",
   "homepage": "https://github.com/AndrewBastin/verzod",
