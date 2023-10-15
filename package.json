@@ -1,6 +1,6 @@
 {
   "name": "verzod",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "description": "A simple versioning and migration library based on Zod schemas",
   "author": "Andrew Bastin (andrewbastin.k@gmail.com)",
@@ -21,6 +21,7 @@
     "dist"
   ],
   "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "test": "vitest --run",
     "build": "tsup",
