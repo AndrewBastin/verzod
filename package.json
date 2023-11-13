@@ -24,6 +24,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "test": "vitest --run",
+    "test:watch": "vitest",
     "build": "tsup",
     "prepublish": "tsup"
   },
