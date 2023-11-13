@@ -6,7 +6,7 @@ settings:
 
 dependencies:
   zod:
-    specifier: ^3.22.2
+    specifier: ^3.22.0
     version: 3.22.2
 
 devDependencies:
