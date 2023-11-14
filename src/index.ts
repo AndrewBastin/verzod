@@ -3,11 +3,11 @@ import { z } from "zod";
 /**
  * Defines a version of a Verzod entity schema and how to upgrade from the previous version.
  */
-export type Version<NewScheme, OldScheme> = {
+export type Version<NewScheme extends z.ZodType, OldScheme> = {
   /**
    * The schema for this version of the entity.
    */
-  schema: z.ZodType<NewScheme>;
+  schema: NewScheme;
 } & (
   | {
       /**
@@ -27,7 +27,7 @@ export type Version<NewScheme, OldScheme> = {
        *
        * @returns The data as in the new version of the schema
        */
-      up: (old: OldScheme) => NewScheme;
+      up: (old: OldScheme) => z.infer<NewScheme>;
     }
 );
 
@@ -39,7 +39,7 @@ export type Version<NewScheme, OldScheme> = {
  * This is only used to help TypeScript infer the type of the given parameter cleanly.
  * @param def The version definition
  */
-export const defineVersion = <NewScheme, OldScheme>(
+export const defineVersion = <NewScheme extends z.ZodType, OldScheme>(
   def: Version<NewScheme, OldScheme>,
 ) => def;
 
@@ -50,7 +50,7 @@ export type SchemaOf<T extends Version<any, any>> = T extends Version<
   infer S,
   any
 >
-  ? S
+  ? z.infer<S>
   : never;
 
 /**
@@ -91,7 +91,7 @@ export type ParseResult<T> =
              * The definition of the version of the data
              * corresponding to the determined version
              */
-            versionDef: Version<unknown, unknown>;
+            versionDef: Version<z.ZodType, unknown>;
 
             /**
              * The `ZodError` returned by the schema validation.
