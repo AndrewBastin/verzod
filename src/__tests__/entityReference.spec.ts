@@ -1,10 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { z } from "zod";
-import {
-  createVersionedEntity,
-  defineVersion,
-  entityReference,
-} from "../index.js";
+import { describe, expect, it } from "vitest"
+import { z } from "zod"
+import { createVersionedEntity, defineVersion, entityReference } from "../index.js"
 
 const v1_schema = z.object({
   name: z.string(),
@@ -13,11 +9,11 @@ const v1_schema = z.object({
     z.object({
       name: z.string(),
       value: z.string(),
-    }),
+    })
   ),
-});
+})
 
-type V1 = z.infer<typeof v1_schema>;
+type V1 = z.infer<typeof v1_schema>
 
 const v2_schema = z.object({
   name: z.string(),
@@ -33,16 +29,16 @@ const v2_schema = z.object({
         value: z.string(),
         masked: z.literal(false),
       }),
-    ]),
+    ])
   ),
-});
+})
 
-type V2 = z.infer<typeof v2_schema>;
+type V2 = z.infer<typeof v2_schema>
 
 const test_V1_version = defineVersion({
   initial: true,
   schema: v1_schema,
-});
+})
 
 const test_V2_version = defineVersion({
   initial: false,
@@ -56,11 +52,11 @@ const test_V2_version = defineVersion({
         value: v.value,
         masked: false,
       })),
-    };
+    }
 
-    return x;
+    return x
   },
-});
+})
 
 const testEntity = createVersionedEntity({
   latestVersion: 2,
@@ -70,24 +66,24 @@ const testEntity = createVersionedEntity({
   },
   getVersion(data) {
     if (typeof data !== "object" || data === null) {
-      return null;
+      return null
     }
 
     // @ts-expect-error - TypeScript cannot understand that the above check will ensure that data is an object
-    const ver = data["v"];
+    const ver = data["v"]
 
     if (typeof ver !== "number") {
-      return null;
+      return null
     }
 
-    return ver;
+    return ver
   },
-});
+})
 
 const connectedSchema = z.object({
   v: z.literal(1),
   testEntity: entityReference(testEntity),
-});
+})
 
 describe("entityReference", () => {
   it("should validate the entity as valid if valid latest schema", () => {
@@ -104,10 +100,10 @@ describe("entityReference", () => {
           },
         ],
       },
-    });
+    })
 
-    expect(result.success).toEqual(true);
-  });
+    expect(result.success).toEqual(true)
+  })
 
   it("should not change the entity if validated as valid with latest schema", () => {
     const result = connectedSchema.safeParse({
@@ -123,11 +119,11 @@ describe("entityReference", () => {
           },
         ],
       },
-    });
+    })
 
-    expect(result.success).toEqual(true);
+    expect(result.success).toEqual(true)
 
-    if (!result.success) throw new Error("this should not be called");
+    if (!result.success) throw new Error("this should not be called")
 
     expect(result.data.testEntity).toEqual({
       v: 2,
@@ -139,8 +135,8 @@ describe("entityReference", () => {
           masked: false,
         },
       ],
-    });
-  });
+    })
+  })
 
   it("should validate the entity as valid if valid old schema", () => {
     const result = connectedSchema.safeParse({
@@ -155,10 +151,10 @@ describe("entityReference", () => {
           },
         ],
       },
-    });
+    })
 
-    expect(result.success).toEqual(true);
-  });
+    expect(result.success).toEqual(true)
+  })
 
   it("should transform the entity to the latest version if valid old schema", () => {
     const result = connectedSchema.safeParse({
@@ -173,11 +169,11 @@ describe("entityReference", () => {
           },
         ],
       },
-    });
+    })
 
-    expect(result.success).toEqual(true);
+    expect(result.success).toEqual(true)
 
-    if (!result.success) throw new Error("this should not be called");
+    if (!result.success) throw new Error("this should not be called")
 
     expect(result.data.testEntity).toEqual({
       v: 2,
@@ -189,6 +185,88 @@ describe("entityReference", () => {
           masked: false,
         },
       ],
-    });
-  });
-});
+    })
+  })
+})
+
+const migrate_child_v1 = z.object({ v: z.literal(1), a: z.number() })
+const migrate_child_v2 = z.object({ v: z.literal(2), b: z.number() })
+const migrateChildVersioned = createVersionedEntity({
+  latestVersion: 2,
+  getVersion(data) {
+    if (typeof data !== "object" || data === null) {
+      return null
+    }
+    // @ts-expect-error
+    return data["v"]
+  },
+  versionMap: {
+    1: defineVersion({
+      initial: true,
+      schema: migrate_child_v1,
+    }),
+    2: defineVersion({
+      initial: false,
+      schema: migrate_child_v2,
+      up(old: z.infer<typeof migrate_child_v1>): z.infer<typeof migrate_child_v2> {
+        return { v: 2, b: old.a }
+      },
+    }),
+  },
+})
+const migrateChildSchema = entityReference(migrateChildVersioned)
+
+const migrate_parent_v1 = z.object({
+  v: z.literal(1),
+  c: z.number(),
+  child: migrateChildSchema,
+})
+const migrate_parent_v2 = z.object({
+  v: z.literal(2),
+  d: z.number(),
+  child: migrateChildSchema,
+})
+
+const migrateParentVersioned = createVersionedEntity({
+  latestVersion: 2,
+  getVersion(data) {
+    if (typeof data !== "object" || data === null) {
+      return null
+    }
+    // @ts-expect-error
+    return data["v"]
+  },
+  versionMap: {
+    1: defineVersion({
+      initial: true,
+      schema: migrate_parent_v1,
+    }),
+    2: defineVersion({
+      initial: false,
+      schema: migrate_parent_v2,
+      up(old: z.infer<typeof migrate_parent_v1>): z.infer<typeof migrate_parent_v2> {
+        return { v: 2, d: old.c, child: old.child }
+      },
+    }),
+  },
+})
+const migrateParentSchema = entityReference(migrateParentVersioned)
+
+describe("nested entityReference", () => {
+  it("nest migrations should migrate to latest version", () => {
+    const result = migrateParentSchema.safeParse({
+      v: 1,
+      c: 4,
+      child: {
+        v: 1,
+        a: 8,
+      },
+    })
+    console.log(result)
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ v: 2, d: 4, child: { v: 2, b: 8 } })
+    }
+  })
+})
