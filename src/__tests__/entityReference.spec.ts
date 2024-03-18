@@ -270,9 +270,9 @@ describe("nested entityReference", () => {
         a: 8,
       },
     });
-    console.log(result);
 
     expect(result.success).toBe(true);
+
     if (result.success) {
       expect(result.data).toEqual({ v: 2, d: 4, child: { v: 2, b: 8 } });
     }
