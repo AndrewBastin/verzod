@@ -223,7 +223,6 @@ export class VersionedEntity<
       finalData = upDef.up(finalData)
     }
 
-    // @ts-expect-error - TypeScript cannot understand that the above loop will update finalData to the latest version
     return { type: "ok", value: finalData }
   }
 }
