@@ -13,7 +13,7 @@ const v1_schema = z.object({
     z.object({
       name: z.string(),
       value: z.string(),
-    }),
+    })
   ),
 });
 
@@ -33,7 +33,7 @@ const v2_schema = z.object({
         value: z.string(),
         masked: z.literal(false),
       }),
-    ]),
+    ])
   ),
 });
 
@@ -190,5 +190,91 @@ describe("entityReference", () => {
         },
       ],
     });
+  });
+});
+
+const migrate_child_v1 = z.object({ v: z.literal(1), a: z.number() });
+const migrate_child_v2 = z.object({ v: z.literal(2), b: z.number() });
+const migrateChildVersioned = createVersionedEntity({
+  latestVersion: 2,
+  getVersion(data) {
+    if (typeof data !== "object" || data === null) {
+      return null;
+    }
+    // @ts-expect-error
+    return data["v"];
+  },
+  versionMap: {
+    1: defineVersion({
+      initial: true,
+      schema: migrate_child_v1,
+    }),
+    2: defineVersion({
+      initial: false,
+      schema: migrate_child_v2,
+      up(
+        old: z.infer<typeof migrate_child_v1>
+      ): z.infer<typeof migrate_child_v2> {
+        return { v: 2, b: old.a };
+      },
+    }),
+  },
+});
+const migrateChildSchema = entityReference(migrateChildVersioned);
+
+const migrate_parent_v1 = z.object({
+  v: z.literal(1),
+  c: z.number(),
+  child: migrateChildSchema,
+});
+const migrate_parent_v2 = z.object({
+  v: z.literal(2),
+  d: z.number(),
+  child: migrateChildSchema,
+});
+
+const migrateParentVersioned = createVersionedEntity({
+  latestVersion: 2,
+  getVersion(data) {
+    if (typeof data !== "object" || data === null) {
+      return null;
+    }
+    // @ts-expect-error
+    return data["v"];
+  },
+  versionMap: {
+    1: defineVersion({
+      initial: true,
+      schema: migrate_parent_v1,
+    }),
+    2: defineVersion({
+      initial: false,
+      schema: migrate_parent_v2,
+      up(
+        old: z.infer<typeof migrate_parent_v1>
+      ): z.infer<typeof migrate_parent_v2> {
+        return { v: 2, d: old.c, child: old.child };
+      },
+    }),
+  },
+});
+const migrateParentSchema = entityReference(migrateParentVersioned);
+
+describe("nested entityReference", () => {
+  it("nest migrations should migrate to latest version", () => {
+    const result = migrateParentSchema.safeParse({
+      v: 1,
+      c: 4,
+      child: {
+        v: 1,
+        a: 8,
+      },
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data).toEqual({ v: 2, d: 4, child: { v: 2, b: 8 } });
+    }
   });
 });
