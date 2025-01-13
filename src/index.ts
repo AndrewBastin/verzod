@@ -270,7 +270,7 @@ export function createVersionedEntity<
  */
 export function entityReference<Entity extends VersionedEntity<any, any>>(entity: Entity) {
   return z
-    .custom<AllSchemasOfEntity<Entity>>((data) => {
+    .custom((data) => {
       return entity.is(data)
     })
     .transform<InferredEntity<Entity>>((data) => {
