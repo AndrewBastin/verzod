@@ -170,6 +170,29 @@ export class VersionedEntity<
     return this.versionMap[this.latestVersion].schema.safeParse(data).success
   }
 
+  /**
+   * Type guard that checks if data is valid for any version up to and including the specified version.
+   * 
+   * @param data The data to check
+   * @param upToVersion The maximum version to check against (inclusive)
+   * @returns true if the data is valid for any version from 1 to upToVersion,
+   *          false if the data's version is higher than upToVersion or invalid
+   * 
+   * @example
+   * ```ts
+   * const entity = createVersionedEntity({ ... })
+   * 
+   * if (entity.isUpToVersion(data, 2)) {
+   *   // data is guaranteed to be v1 or v2 (but not v3 or higher)
+   * }
+   * 
+   * // Returns false for v3 data when checking up to v2
+   * entity.isUpToVersion(v3Data, 2) // false
+   * ```
+   * 
+   * Note: This is particularly useful for recursive entity definitions where you want to ensure
+   * nested entities are at a specific version or lower.
+   */
   public isUpToVersion<Ver extends (keyof M) & number>(
     data: unknown, upToVersion: Ver
   ): data is SchemaOf<M[VersionsUpTo<keyof M, Ver>]> {
@@ -244,6 +267,28 @@ export class VersionedEntity<
     return { type: "ok", value: finalData }
   }
 
+  /**
+   * Parses data and migrates it up to a specific version (not beyond).
+   * 
+   * @param data The data to parse and potentially migrate
+   * @param version The target version to migrate to (will not migrate beyond this)
+   * @returns A ParseResult containing either the migrated data or an error.
+   *          Returns { type: "err", error: { type: "INVALID_VER" } } if data version is higher than requested.
+   * 
+   * @example
+   * ```ts
+   * // If you have v1 data and versions up to v4 exist:
+   * const result = entity.safeParseUpToVersion(v1Data, 2)
+   * // result will contain v2 data (not v3 or v4)
+   * 
+   * // Trying to parse v3 data up to v2 returns an error
+   * const result = entity.safeParseUpToVersion(v3Data, 2)
+   * // result: { type: "err", error: { type: "INVALID_VER" } }
+   * ```
+   * 
+   * Note: This is particularly useful for recursive entity definitions to prevent migration
+   * functions from receiving future versions they weren't designed to handle.
+   */
   public safeParseUpToVersion<
     Ver extends keyof M & number
   >(data: unknown, version: Ver): ParseResult<SchemaOf<M[Ver]>> {
@@ -280,7 +325,7 @@ export class VersionedEntity<
 
     let finalData = pass.data
 
-    for (let up = ver + 1; up <= this.latestVersion; up++) {
+    for (let up = ver + 1; up <= version; up++) {
       const upDef = this.versionMap[up]
 
       if (!upDef) {
@@ -313,6 +358,22 @@ export type InferredEntity<Entity extends VersionedEntity<any, any>> =
     ? SchemaOf<VersionMap[LatestVer]>
     : never
 
+/**
+ * Infers the TypeScript type of an entity at a specific version.
+ * This is useful when you need to work with a specific version of an entity
+ * rather than always using the latest version.
+ * 
+ * @template Entity The VersionedEntity to infer from
+ * @template Version The specific version number to infer
+ * 
+ * @example
+ * ```ts
+ * const UserEntity = createVersionedEntity({ ... })
+ * 
+ * // Get the type of User at version 2 specifically
+ * type UserV2 = InferredEntityUpToVersion<typeof UserEntity, 2>
+ * ```
+ */
 export type InferredEntityUpToVersion<
   Entity extends VersionedEntity<any, any>,
   Version extends KnownEntityVersion<Entity>
@@ -329,6 +390,23 @@ export type AllSchemasOfEntity<Entity extends VersionedEntity<any, any>> =
     ? SchemaOf<VersionMap[keyof VersionMap]>
     : never
 
+/**
+ * Extracts all valid version numbers from a VersionedEntity.
+ * This type helper provides a union of all version numbers that exist
+ * in the entity's version map.
+ * 
+ * @template Entity The VersionedEntity to extract versions from
+ * 
+ * @example
+ * ```ts
+ * const UserEntity = createVersionedEntity({
+ *   latestVersion: 3,
+ *   versionMap: { 1: v1Def, 2: v2Def, 3: v3Def }
+ * })
+ * 
+ * type UserVersions = KnownEntityVersion<typeof UserEntity> // 1 | 2 | 3
+ * ```
+ */
 export type KnownEntityVersion<Entity extends VersionedEntity<any, any>> =
   Entity extends VersionedEntity<any, infer VersionMap>
     ? keyof VersionMap
@@ -377,6 +455,28 @@ export function entityReference<Entity extends VersionedEntity<any, any>>(entity
     })
 }
 
+/**
+ * Creates a Zod schema that validates and parses a versioned entity up to a specific version.
+ * Unlike `entityReference()` which always migrates to the latest version,
+ * this function ensures entities are migrated only up to the specified version.
+ * 
+ * @param entity The VersionedEntity to create a reference for
+ * @param upToVersion The maximum version to migrate to
+ * @returns A Zod schema that validates and migrates up to the specified version
+ * 
+ * @example
+ * ```ts
+ * // Validate data is at most version 2
+ * const schema = z.object({
+ *   user: entityRefUptoVersion(UserEntity, 2),
+ *   metadata: z.record(z.string())
+ * })
+ * ```
+ * 
+ * Note: This is particularly useful for recursive entity definitions where entities reference
+ * themselves, as it prevents migration functions from receiving future versions they weren't
+ * designed to handle.
+ */
 export function entityRefUptoVersion<
   Entity extends VersionedEntity<any, any>,
   Version extends KnownEntityVersion<Entity>,

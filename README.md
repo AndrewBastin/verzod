@@ -149,6 +149,137 @@ You can refer to entities from a Zod schema using the `entityReference` method. 
   SyncedEnvironment.safeParse(synced_env_data) // { type: "ok", value: { id: "test", environment: { name: "test", v: 2, variables: [{ name: "hello", value: "there", masked: false }] } } } <- migrated to latest version
   ```
 
+### Version-Bounded Parsing and Migration
+
+Sometimes you need to parse and migrate data only up to a specific version, not all the way to the latest. This is particularly useful for recursive entity definitions where entities reference themselves. The `upTo` series of functions provide this capability.
+
+#### Why Version-Bounded Migration?
+
+Consider a recursive tree structure where nodes can contain child nodes. When migrating from v1 to v2, if you use regular `entityReference`, the children might be migrated to a future version (e.g., v3 or v4) that didn't exist when you wrote the v1→v2 migration. This can break your migration logic.
+
+Version-bounded functions ensure that entities are only migrated up to a specific version, maintaining consistency in your migration functions.
+
+#### Available Functions
+
+- **`isUpToVersion(data, version)`** - Type guard that checks if data is valid for any version up to and including the specified version
+- **`safeParseUpToVersion(data, version)`** - Parses and migrates data up to a specific version (not beyond)
+- **`entityRefUptoVersion(entity, version)`** - Creates a Zod schema for version-bounded entity references
+
+#### Example: Recursive Tree Structure
+
+```ts
+import { createVersionedEntity, defineVersion, entityRefUptoVersion } from "verzod"
+import { z } from "zod"
+
+// Define a tree structure that references itself
+const TreeNode = createVersionedEntity({
+  latestVersion: 3,
+  versionMap: {
+    1: defineVersion({
+      initial: true,
+      schema: z.object({
+        v: z.literal(1),
+        name: z.string(),
+        children: z.array(z.lazy(() => entityRefUptoVersion(TreeNode, 1)))
+      })
+    }),
+    2: defineVersion({
+      initial: false,
+      schema: z.object({
+        v: z.literal(2),
+        name: z.string(),
+        depth: z.number(),
+        children: z.array(z.lazy(() => entityRefUptoVersion(TreeNode, 2)))
+      }),
+      up(old) {
+        // When migrating v1→v2, children are guaranteed to be at v2 or lower
+        // They won't be v3 even if v3 exists in the codebase
+        return {
+          v: 2,
+          name: old.name,
+          depth: 0,
+          children: old.children.map(child => {
+            // Manually migrate each child to v2
+            const result = TreeNode.safeParseUpToVersion(child, 2)
+            if (result.type !== "ok") throw new Error("Failed to migrate child")
+            return result.value
+          })
+        }
+      }
+    }),
+    3: defineVersion({
+      initial: false,
+      schema: z.object({
+        v: z.literal(3),
+        name: z.string(),
+        depth: z.number(),
+        path: z.string(),
+        children: z.array(z.lazy(() => entityRefUptoVersion(TreeNode, 3)))
+      }),
+      up(old) {
+        // Similarly, when migrating v2→v3, children are at v3 or lower
+        return {
+          v: 3,
+          name: old.name,
+          depth: old.depth,
+          path: `/${old.name}`,
+          children: old.children.map(child => {
+            const result = TreeNode.safeParseUpToVersion(child, 3)
+            if (result.type !== "ok") throw new Error("Failed to migrate child")
+            return result.value
+          })
+        }
+      }
+    })
+  },
+  getVersion(data) {
+    return (data as any)?.v ?? null
+  }
+})
+```
+
+#### Using Version-Bounded Functions
+
+```ts
+const v1Tree = {
+  v: 1,
+  name: "root",
+  children: [
+    { v: 1, name: "child1", children: [] },
+    { v: 1, name: "child2", children: [] }
+  ]
+}
+
+// Check if data is valid up to v2 (returns false for v3 data)
+TreeNode.isUpToVersion(v1Tree, 2) // true
+TreeNode.isUpToVersion(v3Tree, 2) // false
+
+// Parse and migrate only up to v2
+const v2Result = TreeNode.safeParseUpToVersion(v1Tree, 2)
+// Result: tree migrated to v2, not v3
+
+// Use in other schemas
+const TreeContainer = z.object({
+  id: z.string(),
+  // This ensures the tree is at most v2
+  tree: entityRefUptoVersion(TreeNode, 2)
+})
+```
+
+#### Type Safety
+
+The version-bounded functions maintain full type safety:
+
+```ts
+import { InferredEntityUpToVersion, KnownEntityVersion } from "verzod"
+
+// Get the type at a specific version
+type TreeV2 = InferredEntityUpToVersion<typeof TreeNode, 2>
+
+// Get all valid version numbers
+type TreeVersions = KnownEntityVersion<typeof TreeNode> // 1 | 2 | 3
+```
+
 
 <br />
 <br />
