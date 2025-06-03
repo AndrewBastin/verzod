@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { VersionsUpTo } from "./types.ts"
 
 /**
  * Defines a version of a Verzod entity schema and how to upgrade from the previous version.
@@ -169,6 +170,23 @@ export class VersionedEntity<
     return this.versionMap[this.latestVersion].schema.safeParse(data).success
   }
 
+  public isUpToVersion<Ver extends (keyof M) & number>(
+    data: unknown, upToVersion: Ver
+  ): data is SchemaOf<M[VersionsUpTo<keyof M, Ver>]> {
+    let ver = this.getVersion(data)
+
+    if (ver === null) return false
+
+    // If the version is above the upToVersion given, we consider it not matching and return false
+    if (ver > upToVersion) return false
+
+    const verDef = this.versionMap[ver]
+
+    if (!verDef) return false
+
+    return verDef.schema.safeParse(data).success
+  }
+
   /**
    * Similar to Zod's `safeParse` method, but also migrates the data to the latest version.
    * @param data The data to parse
@@ -179,6 +197,65 @@ export class VersionedEntity<
 
     if (ver === null) {
       return { type: "err", error: { type: "VER_CHECK_FAIL" } }
+    }
+
+    const verDef = this.versionMap[ver]
+
+    if (!verDef) {
+      return { type: "err", error: { type: "INVALID_VER" } }
+    }
+
+    const pass = verDef.schema.safeParse(data)
+
+    if (!pass.success) {
+      return {
+        type: "err",
+        error: {
+          type: "GIVEN_VER_VALIDATION_FAIL",
+          version: ver,
+          versionDef: verDef,
+          error: pass.error,
+        },
+      }
+    }
+
+    let finalData = pass.data
+
+    for (let up = ver + 1; up <= this.latestVersion; up++) {
+      const upDef = this.versionMap[up]
+
+      if (!upDef) {
+        return {
+          type: "err",
+          error: { type: "BUG_NO_INTERMEDIATE_FOUND", missingVer: up },
+        }
+      }
+
+      if (upDef.initial) {
+        return {
+          type: "err",
+          error: { type: "BUG_INTERMEDIATE_MARKED_INITIAL", ver: up },
+        }
+      }
+
+      finalData = upDef.up(finalData)
+    }
+
+    return { type: "ok", value: finalData }
+  }
+
+  public safeParseUpToVersion<
+    Ver extends keyof M & number
+  >(data: unknown, version: Ver): ParseResult<SchemaOf<M[Ver]>> {
+    const ver = this.getVersion(data)
+
+    if (ver === null) {
+      return { type: "err", error: { type: "VER_CHECK_FAIL" } }
+    }
+
+    // Validate if the version is not greater than the requested version
+    if (ver > version) {
+      return { type: "err", error: { type: "INVALID_VER" } }
     }
 
     const verDef = this.versionMap[ver]
@@ -236,12 +313,25 @@ export type InferredEntity<Entity extends VersionedEntity<any, any>> =
     ? SchemaOf<VersionMap[LatestVer]>
     : never
 
+export type InferredEntityUpToVersion<
+  Entity extends VersionedEntity<any, any>,
+  Version extends KnownEntityVersion<Entity>
+> =
+  Entity extends VersionedEntity<any, infer VersionMap>
+    ? SchemaOf<VersionMap[Version]>
+    : never
+
 /**
  * Provides a union type of all the versions of an entity.
  */
 export type AllSchemasOfEntity<Entity extends VersionedEntity<any, any>> =
   Entity extends VersionedEntity<any, infer VersionMap>
     ? SchemaOf<VersionMap[keyof VersionMap]>
+    : never
+
+export type KnownEntityVersion<Entity extends VersionedEntity<any, any>> =
+  Entity extends VersionedEntity<any, infer VersionMap>
+    ? keyof VersionMap
     : never
 
 /**
@@ -284,5 +374,27 @@ export function entityReference<Entity extends VersionedEntity<any, any>>(entity
       }
 
       return parseResult.value as InferredEntity<Entity>
+    })
+}
+
+export function entityRefUptoVersion<
+  Entity extends VersionedEntity<any, any>,
+  Version extends KnownEntityVersion<Entity>,
+>(entity: Entity, upToVersion: Version) {
+  return z
+    .custom((data) => {
+      return entity.isUpToVersion(data, upToVersion)
+    })
+    .transform<InferredEntityUpToVersion<Entity, Version>>((data) => {
+      const parseResult = entity.safeParseUpToVersion(data, upToVersion)
+
+      if (parseResult.type !== "ok") {
+        // This should never happen unless you have a very weird/bad entity definition.
+        throw new Error(
+          "Invalid entity definition. `entity.isUpToVersion` returned success, safeParse failed."
+        )
+      }
+      
+      return parseResult.value
     })
 }
