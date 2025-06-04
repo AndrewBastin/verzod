@@ -27,6 +27,11 @@ export type Version<NewScheme extends z.ZodType, OldScheme> = {
        * @param old The data as in the previous version of the schema
        *
        * @returns The data as in the new version of the schema
+       * 
+       * Note: This function is not expected to be fallible (throw errors) because
+       * the data has already been validated against the previous version's schema
+       * before this function is called. The getVersion function helps ensure the
+       * correct version is identified and validated before migration.
        */
       up: (old: OldScheme) => z.infer<NewScheme>
     }
