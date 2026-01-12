@@ -155,7 +155,7 @@ export class VersionedEntity<
    * @returns Whether the given data is a valid entity of any version of the entity.
    */
   public is(data: unknown): data is SchemaOf<M[keyof M]> {
-    let ver = this.getVersion(data)
+    const ver = this.getVersion(data)
 
     if (ver === null) return false
 
@@ -172,7 +172,17 @@ export class VersionedEntity<
    * @returns Whether the given data is a valid entity of the latest version of the entity.
    */
   public isLatest(data: unknown): data is SchemaOf<M[LatestVer]> {
-    return this.versionMap[this.latestVersion].schema.safeParse(data).success
+    const ver = this.getVersion(data)
+
+    if (ver === null) return false
+
+    if (ver !== this.latestVersion) return false
+
+    const verDef = this.versionMap[ver]
+
+    if (!verDef) return false
+
+    return verDef.schema.safeParse(data).success
   }
 
   /**

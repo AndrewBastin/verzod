@@ -450,6 +450,133 @@ describe("createVersionedEntity", () => {
     })
   })
 
+  describe("isLatest", () => {
+    it("returns true when the data is of the latest version with correct shape", () => {
+      const entity = createTestEntity()
+
+      const data = {
+        name: "test",
+        v: 2,
+        variables: [
+          {
+            name: "test",
+            value: "test",
+            masked: false
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(true)
+    })
+
+    it("returns false when the shape is correct but the version number is wrong (v1 shape with v2 version)", () => {
+      const entity = createTestEntity()
+
+      // Data has v2 structure (correct shape) but wrong version number
+      const data = {
+        name: "test",
+        v: 1, // Wrong version - should be 2
+        variables: [
+          {
+            name: "test",
+            value: "test",
+            masked: false // This is v2 structure
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+
+    it("returns false when the shape is correct but the version number is wrong (v2 shape with v1 version)", () => {
+      const entity = createTestEntity()
+
+      // Data has v2 structure (correct shape) but wrong version number
+      const data = {
+        name: "test",
+        v: 1, // Wrong version - should be 2
+        variables: [
+          {
+            name: "test",
+            masked: true // This is v2 structure
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+
+    it("returns false when the shape is correct but the version number is invalid", () => {
+      const entity = createTestEntity()
+
+      // Data has v2 structure (correct shape) but invalid version number
+      const data = {
+        name: "test",
+        v: 3, // Invalid version - not in version map
+        variables: [
+          {
+            name: "test",
+            value: "test",
+            masked: false // This is v2 structure
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+
+    it("returns false when the data does not match the latest schema version", () => {
+      const entity = createTestEntity()
+
+      const data = {
+        name: "test",
+        v: 2,
+        variables: [
+          {
+            name: "test",
+            value: 1 // Invalid: should be string
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+
+    it("returns false when the data doesn't resolve to a version", () => {
+      const entity = createTestEntity()
+
+      const data = {
+        name: "test",
+        variables: [
+          {
+            name: "test",
+            value: "test",
+            masked: false
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+
+    it("returns false when the data is of an old version with correct old shape", () => {
+      const entity = createTestEntity()
+
+      const data = {
+        name: "test",
+        v: 1,
+        variables: [
+          {
+            name: "test",
+            value: "test"
+          }
+        ]
+      }
+
+      expect(entity.isLatest(data)).toEqual(false)
+    })
+  })
+
   describe("isUpToVersion", () => {
     it("returns true for data at exact version", () => {
       const entity = createTestEntity()
